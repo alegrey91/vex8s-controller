@@ -22,25 +22,29 @@ import (
 	sbomscannerstorage "github.com/kubewarden/sbomscanner/api/storage/v1alpha1"
 )
 
-type PodVEXReconciler struct {
+type VEXPodReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
 // SetupWithManager sets up the controller with the Manager
-func (r *PodVEXReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *VEXPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		Complete(r)
 }
 
 // Reconcile handles Pod events
-func (r *PodVEXReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *VEXPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("New pod detected", "reconciliation start-up", req.Name)
 
-	// TODO: first of all we should
-	// ensure that SBOMscanner is installed.
+	// Ensure SBOMscanner is installed
+	vulnReportList := &sbomscannerstorage.VulnerabilityReportList{}
+	if err := r.List(ctx, vulnReportList); err != nil {
+		logger.Error(err, "SBOMscanner not installed")
+		return ctrl.Result{}, err
+	}
 
 	// Fetch the Pod
 	pod := &corev1.Pod{}
@@ -92,7 +96,6 @@ func (r *PodVEXReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		totalMitigated = append(totalMitigated, mitigated...)
 	}
 
-	// TODO: Store mitigation results, generate VEX document, etc.
 	// Generate VEX document
 	if len(totalMitigated) == 0 {
 		logger.Info("No mitigations have been found", "pod", pod.Name)
@@ -106,20 +109,23 @@ func (r *PodVEXReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	vexDoc, err := vex.GenerateVEX(totalMitigated, vexInfo)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("Failed to generate VEX document: %w", err)
+		logger.Error(err, "Failed to generate VEX document", "pod", pod.Name)
+		return ctrl.Result{}, err
 	}
 
 	// Write VEX content
 	vexContent, err := json.MarshalIndent(vexDoc, "", "  ")
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("Failed to marshal VEX document: %w", err)
+		logger.Error(err, "Failed to marshal VEX document", "pod", pod.Name)
+		return ctrl.Result{}, err
 	}
 	// only for debugging purpose
 	fmt.Println(string(vexContent))
 
 	// Save VEX document to ConfigMap
 	if err := r.saveVEXToConfigMap(ctx, pod, string(vexContent)); err != nil {
-		return ctrl.Result{}, fmt.Errorf("Failed to save VEX document to ConfigMap: %w", err)
+		logger.Error(err, "Failed to save VEX document to ConfigMap", "pod", pod.Name)
+		return ctrl.Result{}, err
 	}
 	logger.Info("Successfully saved VEX document", "pod", pod.Name, "pod", pod.Name)
 
@@ -127,7 +133,7 @@ func (r *PodVEXReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 // findVulnerabilityReport searches for a VulnerabilityReport matching the container image
-func (r *PodVEXReconciler) findVulnerabilityReport(ctx context.Context, namespace, image string) (*sbomscannerstorage.VulnerabilityReport, error) {
+func (r *VEXPodReconciler) findVulnerabilityReport(ctx context.Context, namespace, image string) (*sbomscannerstorage.VulnerabilityReport, error) {
 	logger := log.FromContext(ctx)
 
 	// List all VulnerabilityReports in the namespace
@@ -169,7 +175,7 @@ func (r *PodVEXReconciler) findVulnerabilityReport(ctx context.Context, namespac
 }
 
 // extractCVEs converts VulnerabilityReport vulnerabilities to CVE struct list
-func (r *PodVEXReconciler) extractCVEs(vulnReport *sbomscannerstorage.VulnerabilityReport) []vex8s.CVE {
+func (r *VEXPodReconciler) extractCVEs(vulnReport *sbomscannerstorage.VulnerabilityReport) []vex8s.CVE {
 	var cves []vex8s.CVE
 
 	// Extract vulnerabilities from the report
@@ -212,7 +218,7 @@ func normalizeImageName(image string) string {
 }
 
 // saveVEXToConfigMap saves the VEX document to a ConfigMap
-func (r *PodVEXReconciler) saveVEXToConfigMap(ctx context.Context, pod *corev1.Pod, vexDoc string) error {
+func (r *VEXPodReconciler) saveVEXToConfigMap(ctx context.Context, pod *corev1.Pod, vexDoc string) error {
 	logger := log.FromContext(ctx)
 
 	// Create ConfigMap name (use pod name + container name)

@@ -183,11 +183,11 @@ func main() {
 	}
 
 	// +kubebuilder:scaffold:builder
-	if err = (&controller.PodVEXReconciler{
+	if err = (&controller.VEXPodReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PodVEX")
+		setupLog.Error(err, "unable to create controller", "controller", "VEXPod")
 		os.Exit(1)
 	}
 
