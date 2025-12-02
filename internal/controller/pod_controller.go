@@ -14,13 +14,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	vex8s "github.com/alegrey91/vex8s/pkg/mitigation"
 	"github.com/alegrey91/vex8s/pkg/vex"
 	sbomscannerstorage "github.com/kubewarden/sbomscanner/api/storage/v1alpha1"
 )
+
+const configMapVex = "vex8s.json"
 
 type VEXPodReconciler struct {
 	client.Client
@@ -37,7 +38,7 @@ func (r *VEXPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile handles Pod events
 func (r *VEXPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("New pod detected", "reconciliation start-up", req.Name)
+	logger.Info("Pod event detected", "reconciliation start-up", req.Name)
 
 	// Ensure SBOMscanner is installed
 	vulnReportList := &sbomscannerstorage.VulnerabilityReportList{}
@@ -57,9 +58,13 @@ func (r *VEXPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Skip if pod is not running or pending
+	// Delete key/value in ConfigMap if pod is not running or pending
 	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending {
-		logger.Info("Skipping pod - not in Running or Pending phase", "phase", pod.Status.Phase)
+		logger.Info("Deleting pod VEX document from ConfigMap", "pod", pod.Name)
+		err := r.deleteVEXKeyFromConfigMap(ctx, pod)
+		if err != nil {
+			logger.Error(err, "Failed to delete key/value in ConfigMap")
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -145,30 +150,15 @@ func (r *VEXPodReconciler) findVulnerabilityReport(ctx context.Context, namespac
 	// Normalize the image name for comparison
 	normalizedImage := normalizeImageName(image)
 	fmt.Println("normalized image: ", normalizedImage)
-	// normalized image:  docker.io/localhost:5000/test-image
+	// eg. normalized image:  docker.io/localhost:5000/test-image
 
 	// Search for matching report
 	for _, report := range vulnReportList.Items {
 		// Check if the report matches this image
-		// This depends on how sbomscanner stores image references
-		// Common fields might be: .spec.artifact.image, .metadata.labels["image"], etc.
-
-		// Option 1: Check artifact field (adjust based on actual API)
 		if report.ImageMetadata.Repository == normalizedImage {
 			logger.Info("Found matching VulnerabilityReport", "report", report.Name, "image", image)
 			return &report, nil
 		}
-
-		// Option 2: Check labels
-		if reportImage, ok := report.Labels["image"]; ok {
-			if normalizeImageName(reportImage) == normalizedImage {
-				logger.Info("Found matching VulnerabilityReport via label", "report", report.Name, "image", image)
-				return &report, nil
-			}
-		}
-
-		// Option 3: Check by naming convention (e.g., reports named after image digest)
-		// Add your specific matching logic here
 	}
 
 	return nil, nil // No matching report found
@@ -222,44 +212,37 @@ func (r *VEXPodReconciler) saveVEXToConfigMap(ctx context.Context, pod *corev1.P
 	logger := log.FromContext(ctx)
 
 	// Create ConfigMap name (use pod name + container name)
-	configMapName := fmt.Sprintf("vex-%s", pod.Name)
+	podID := fmt.Sprintf("vex-%s", pod.Name)
 
 	// Create or update ConfigMap
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
+			Name:      configMapVex,
 			Namespace: pod.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "vex8s-controller",
 				"app.kubernetes.io/component":  "vex-document",
-				"vex8s.io/pod":                 pod.Name,
 			},
 			Annotations: map[string]string{
 				"vex8s.io/generated-at": time.Now().UTC().Format(time.RFC3339),
-				"vex8s.io/pod-uid":      string(pod.UID),
 			},
 		},
 		Data: map[string]string{
-			"vex.json": vexDoc,
+			podID: vexDoc,
 		},
-	}
-
-	// Set Pod as owner of ConfigMap for automatic cleanup
-	if err := controllerutil.SetControllerReference(pod, configMap, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	// Try to get existing ConfigMap
 	existingConfigMap := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{
-		Name:      configMapName,
+		Name:      configMapVex,
 		Namespace: pod.Namespace,
 	}, existingConfigMap)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new ConfigMap
-			logger.Info("Creating new VEX ConfigMap", "name", configMapName)
+			logger.Info("Creating new VEX ConfigMap", "name", configMapVex)
 			if err := r.Create(ctx, configMap); err != nil {
 				return fmt.Errorf("failed to create ConfigMap: %w", err)
 			}
@@ -268,15 +251,40 @@ func (r *VEXPodReconciler) saveVEXToConfigMap(ctx context.Context, pod *corev1.P
 		return fmt.Errorf("failed to get ConfigMap: %w", err)
 	}
 
-	// Update existing ConfigMap
-	logger.Info("Updating existing VEX ConfigMap", "name", configMapName)
-	existingConfigMap.Data = configMap.Data
+	// Patch existing ConfigMap
+	logger.Info("Updating existing VEX ConfigMap", "name", configMapVex)
+	patch := client.MergeFrom(existingConfigMap.DeepCopy())
+	if existingConfigMap.Data == nil {
+		existingConfigMap.Data = map[string]string{}
+	}
+	existingConfigMap.Data[podID] = vexDoc
 	existingConfigMap.Labels = configMap.Labels
 	existingConfigMap.Annotations = configMap.Annotations
 
-	if err := r.Update(ctx, existingConfigMap); err != nil {
+	if err := r.Patch(ctx, existingConfigMap, patch); err != nil {
 		return fmt.Errorf("failed to update ConfigMap: %w", err)
 	}
 
 	return nil
+}
+
+func (r *VEXPodReconciler) deleteVEXKeyFromConfigMap(ctx context.Context, pod *corev1.Pod) error {
+	var cm corev1.ConfigMap
+	podID := fmt.Sprintf("vex-%s", pod.Name)
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      configMapVex,
+		Namespace: pod.Namespace},
+		&cm)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil // ConfigMap does not exist, nothing to delete
+		}
+		return err
+	}
+
+	// Delete the key from the Data map
+	delete(cm.Data, podID)
+
+	// Now apply the update
+	return r.Update(ctx, &cm)
 }

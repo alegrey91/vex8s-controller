@@ -1,7 +1,8 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+CONTROLLER_IMG ?= controller:latest
+VEXHUB_IMG ?= vexhub:latest
 
-BUILD_VARS=GOTOOLCHAIN=go1.25.3 GOEXPERIMENT=jsonv2
+BUILD_VARS=GOTOOLCHAIN=go1.25.4
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -107,29 +108,63 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	$(BUILD_VARS) go build -o bin/manager cmd/main.go
+build: build-controller build-vexhub ## Build manager binary.
+
+.PHONY: build-controller
+build-controller: manifests generate fmt vet ## Build manager binary.
+	$(BUILD_VARS) go build -o bin/manager cmd/controller/main.go
+
+.PHONY: build-vexhub
+build-vexhub: manifests generate fmt vet ## Build manager binary.
+	$(BUILD_VARS) go build -o bin/vexhub cmd/vexhub/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/controller/main.go
+
+.PHONY: run-vexhub
+run-vexhub: manifests generate fmt vet certs ## Run a controller from your host.
+	go run ./cmd/vexhub/main.go -cert-path cert.pem -key-path key.pem
+
+.PHONY: certs
+certs:
+	openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: docker-build-controller docker-build-vexhub
+
+.PHONY: docker-build-controller
+docker-build-controller: ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build \
+		-t ${CONTROLLER_IMG} \
+		-f ./Dockerfile.controller .
+
+.PHONY: docker-build-vexhub
+docker-build-vexhub: ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build \
+		-t ${VEXHUB_IMG} \
+		-f ./Dockerfile.vexhub .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: docker-push-controller docker-push-vexhub
+	$(CONTAINER_TOOL) push ${CONTROLLER_IMG}
+
+.PHONY: docker-push-controller
+docker-push-controller: ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push ${CONTROLLER_IMG}
+
+.PHONY: docker-push-vexhub
+docker-push-vexhub: ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push ${VEXHUB_IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
+# architectures. (i.e. make docker-buildx CONTROLLER_IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
+# - be able to push the image to your registry (i.e. if you do not set a valid value via CONTROLLER_IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
@@ -138,14 +173,14 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name vex8s-controller-builder
 	$(CONTAINER_TOOL) buildx use vex8s-controller-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${CONTROLLER_IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm vex8s-controller-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${CONTROLLER_IMG}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
 ##@ Deployment
@@ -166,7 +201,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${CONTROLLER_IMG}
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 
 .PHONY: undeploy

@@ -3,13 +3,16 @@ module kubewarden.io/vex8s-controller
 go 1.25.4
 
 require (
+	//github.com/alegrey91/sbomscanner v0.0.0-20251202151155-c6cc8ded051c
 	github.com/kubewarden/sbomscanner v0.8.3
-	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
+	github.com/openvex/go-vex v0.2.7
 	k8s.io/apimachinery v0.34.2
 	k8s.io/client-go v0.34.2
 	sigs.k8s.io/controller-runtime v0.22.4
 )
+
+require github.com/onsi/ginkgo/v2 v2.27.2
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
@@ -25,7 +28,6 @@ require (
 	github.com/go-openapi/swag/stringutils v0.25.1 // indirect
 	github.com/go-openapi/swag/typeutils v0.25.1 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.1 // indirect
-	github.com/openvex/go-vex v0.2.7 // indirect
 	github.com/package-url/packageurl-go v0.1.3 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
@@ -33,7 +35,7 @@ require (
 
 require (
 	cel.dev/expr v0.25.0 // indirect
-	github.com/alegrey91/vex8s v0.0.0-20251126105853-c85416e6b275
+	github.com/alegrey91/vex8s v0.0.0-20251127145852-d29c40d463d5
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -116,7 +118,5 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace (
-	github.com/alegrey91/vex8s v0.0.0-20251126105853-c85416e6b275 => /home/alessio/Documents/git/personal/vex8s
-	github.com/kubewarden/sbomscanner v0.8.3 => /home/alessio/Documents/git/work/sbomscanner
-)
+//github.com/alegrey91/vex8s v0.0.0-20251126105853-c85416e6b275 => /home/alessio/Documents/git/personal/vex8s
+replace github.com/kubewarden/sbomscanner v0.8.3 => /home/alessio/Documents/git/work/sbomscanner
