@@ -119,4 +119,5 @@ require (
 )
 
 //github.com/alegrey91/vex8s v0.0.0-20251126105853-c85416e6b275 => /home/alessio/Documents/git/personal/vex8s
-replace github.com/kubewarden/sbomscanner v0.8.3 => /home/alessio/Documents/git/work/sbomscanner
+//replace github.com/kubewarden/sbomscanner v0.8.3 => /home/alessio/Documents/git/work/sbomscanner
+replace github.com/kubewarden/sbomscanner => github.com/alegrey91/sbombastic v0.0.0-20251202151155-c6cc8ded051c
