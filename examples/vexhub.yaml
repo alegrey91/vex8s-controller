@@ -1,0 +1,7 @@
+apiVersion: sbomscanner.kubewarden.io/v1alpha1
+kind: VEXHub
+metadata:
+  name: vex8s-vexhub
+spec:
+  url: https://vex8s-controller-vexhub.vex8s-controller-system.svc.cluster.local:8080
+  enabled: true

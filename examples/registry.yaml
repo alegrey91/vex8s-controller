@@ -1,0 +1,14 @@
+apiVersion: sbomscanner.kubewarden.io/v1alpha1
+kind: Registry
+metadata:
+  name: my-first-registry
+  namespace: default
+spec:
+  uri: dev-registry.default.svc.cluster.local:5000
+  catalogType: OCIDistribution
+  scanInterval: 1h
+  repositories:
+    - name: nginx
+  platforms:
+    - arch: "amd64"
+      os: "linux"

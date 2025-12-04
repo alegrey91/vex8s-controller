@@ -1,0 +1,7 @@
+apiVersion: sbomscanner.kubewarden.io/v1alpha1
+kind: ScanJob
+metadata:
+  name: my-first-scanjob
+  namespace: default
+spec:
+  registry: my-first-registry

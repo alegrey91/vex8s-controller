@@ -1,0 +1,421 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+    control-plane: controller-manager
+  name: vex8s-ns
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+  name: vex8s-controller
+  namespace: vex8s-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+  name: vex8s-controller-leader-election-role
+  namespace: vex8s-ns
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+  name: vex8s-controller-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - '*'
+- apiGroups:
+  - storage.sbomscanner.kubewarden.io
+  resources:
+  - vulnerabilityreports
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vex8s-controller-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vex8s-controller-metrics-reader
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+  name: vex8s-controller-leader-election-rolebinding
+  namespace: vex8s-ns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vex8s-controller-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: vex8s-controller
+  namespace: vex8s-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+  name: vex8s-controller-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vex8s-controller-manager-role
+subjects:
+- kind: ServiceAccount
+  name: vex8s-controller
+  namespace: vex8s-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vex8s-controller-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vex8s-controller-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: vex8s-controller
+  namespace: vex8s-ns
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vex8s-controller-certs
+  namespace: vex8s-ns
+data:
+  cert.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIFCTCCAvGgAwIBAgIUMbU6CsvZtcUMMs+1tsvyTo+n31MwDQYJKoZIhvcNAQEL
+    BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI1MTIwMzEyMjAzM1oXDTI2MTIw
+    MzEyMjAzM1owFDESMBAGA1UEAwwJbG9jYWxob3N0MIICIjANBgkqhkiG9w0BAQEF
+    AAOCAg8AMIICCgKCAgEArowvQ6Gz56Wyc77jqjkQpxQdi3W26k0EBi41dWL+xuph
+    gIUHSnE/rMUOIh3kTLceNV+K6FOHEChYYVeQyOLmVW/b8TprE38VZlmZTZSLCJM9
+    KWBCVYliKHlBRLKvMLgWRudeQ3MTtinG986yDfA4Xugbp1JMRmGjTrBRwBPp4wIC
+    9Lo0fsarpSHeopjWBzspIBbYhG2OiQAvV9FUn5gnZqjOb2Cy78mSNJ+auKtchtOy
+    RHbdfW5ATi73K+Pa4PUnb43zGz6OwfJK/ZYuKYxiNdrCj6CEUxPUcxOEESeyusep
+    SBUtp9Z4ddQe4OvtatnXMoLWFOXET2HqRlrxtGMKNuLODjyefO7vhazbeJWVsIiA
+    85yVSdMyMKSML3BJyjFTfRdTYPPR+hQG6zUfCJA+sdcXQXK8luMjhZigvpvavZHr
+    eaYw4iJ/QGVRsDNfNbXxcpWNH2bYNmfPzjFpB7vWlRLHaRG4HpUovoPGf6G5RN99
+    dRlrjsk1KAwwOnlsTbjhQBomGgHyjJEYRDcgX/IXgqux66VHBavwYWJyu1l5PO+p
+    FzK/7aDU7oadkzQcdNoNh9MK45IV0GjAir0o24Vd0CPFbZ7IJQqJqKxRB8zSow+q
+    QEmp2mxS0vZWRiJ93toe0DgxOx6zkLRozRXtUkzoUYPbJFBq1BCcs1BwtAEgAB0C
+    AwEAAaNTMFEwHQYDVR0OBBYEFFZharAJUFlS66xwsBfA9vjitG85MB8GA1UdIwQY
+    MBaAFFZharAJUFlS66xwsBfA9vjitG85MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
+    hvcNAQELBQADggIBACNkko8ip655zKSoL7CCZ7vxTaGTW7D53daJ5WlJgVs6dKJ/
+    QlRAo4vJDSe7mmisavyw8HPjNeG/MsFoiJa0YvksdwMc21hWBXCLY+o5eSgo3U2P
+    totTtjs/UEgsKFNew5/HuOav5qNPVLD8b2JitKnWf3Lun9PyBGJ/oM1nDLDLvy0t
+    8PqE0zUs76NKom03GnQnAswFu31yY+Eiza/YPSGJ4nk9bXe/MB45r6abyaNZaetR
+    JVXf3btfOY1mcYMzysiETueNmnHUzT9ImcQjo4bXHo9cqVn7JiJcYTeaHkwwgnZV
+    ekymjaZosoZryoKPmjPRBqqLYACdFcntfAPVwP4T9dRuCot+gzFh/ax/o+dJ6qx3
+    2Jq0o6tGFsR6E5xRFVNYkd0nFXgZ0DZO3p2i1tQpe53oBw2XxgR/7rsbJpXhJBjF
+    +chjZk3WnvVO0ZwebWN0H3pNpW8oMmrzJdmgm3nvbRnkKhQT1+/iAslRKQ6acCX6
+    4zJwF+H79biZwiRCBH2ArtaDEWmJLmtErEKvnkyUxBtxtaliv5txkLzXdkrIXzfV
+    bFUkwLv53r6VLS56N/DOJVtjfJt3KSIxMF0HnaZosFGfdrOaRBv1uW6YHsfhzHUL
+    g+VB2Le3tA6WOEsTG27LhDAc+IexvknWE8yYKggyb528ZjdgVRXcr8vD6pgJ
+    -----END CERTIFICATE-----
+  key.pem: |
+    -----BEGIN PRIVATE KEY-----
+    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
+    SHDUtQjUjdRTgNu52/3Bq5mJgPBH4Q==
+    -----END PRIVATE KEY-----
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+    control-plane: controller-manager
+  name: vex8s-controller-metrics-service
+  namespace: vex8s-ns
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: vex8s-controller
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: vex8s-controller
+  name: vex8s-vexhub
+  namespace: vex8s-ns
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: vexhub
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+    control-plane: controller-manager
+  name: vex8s-controller
+  namespace: vex8s-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vex8s-controller
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: vex8s-controller
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        image: localhost/controller:${IMG}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports: []
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts: []
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: vex8s-controller
+      terminationGracePeriodSeconds: 10
+      volumes: []
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: vex8s-controller
+    control-plane: vexhub
+  name: vex8s-vexhub
+  namespace: vex8s-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vex8s-controller
+      control-plane: vexhub
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app: vexhub
+        app.kubernetes.io/name: vex8s-controller
+        control-plane: vexhub
+    spec:
+      containers:
+      - args:
+        - -cert-path=/etc/ssl/cert.pem
+        - -key-path=/etc/ssl/key.pem
+        command:
+        - /vexhub
+        image: localhost/vexhub:${IMG}
+        name: vexhub
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /etc/ssl
+          name: certs-volume
+          readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: vex8s-controller
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          items:
+          - key: cert.pem
+            path: cert.pem
+          - key: key.pem
+            path: key.pem
+          name: vex8s-controller-certs
+        name: certs-volume
