@@ -149,7 +149,6 @@ func (r *VEXPodReconciler) findVulnerabilityReport(ctx context.Context, namespac
 
 	// Normalize the image name for comparison
 	normalizedImage := normalizeImageName(image)
-	fmt.Println("normalized image: ", normalizedImage)
 	// eg. normalized image:  docker.io/localhost:5000/test-image
 
 	// Search for matching report
