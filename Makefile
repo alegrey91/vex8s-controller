@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-CONTROLLER_IMG ?= controller:latest
-VEXHUB_IMG ?= vexhub:latest
+IMG ?= controller:latest
+#IMG ?= vexhub:latest
 
 BUILD_VARS=GOTOOLCHAIN=go1.25.4
 
@@ -139,32 +139,32 @@ docker-build: docker-build-controller docker-build-vexhub
 .PHONY: docker-build-controller
 docker-build-controller: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build \
-		-t ${CONTROLLER_IMG} \
+		-t localhost/controller:${IMG} \
 		-f ./Dockerfile.controller .
 
 .PHONY: docker-build-vexhub
 docker-build-vexhub: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build \
-		-t ${VEXHUB_IMG} \
+		-t localhost/vexhub:${IMG} \
 		-f ./Dockerfile.vexhub .
 
 .PHONY: docker-push
 docker-push: docker-push-controller docker-push-vexhub
-	$(CONTAINER_TOOL) push ${CONTROLLER_IMG}
+	$(CONTAINER_TOOL) push ${IMG}
 
 .PHONY: docker-push-controller
 docker-push-controller: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${CONTROLLER_IMG}
+	$(CONTAINER_TOOL) push ${IMG}
 
 .PHONY: docker-push-vexhub
 docker-push-vexhub: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${VEXHUB_IMG}
+	$(CONTAINER_TOOL) push ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx CONTROLLER_IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
+# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via CONTROLLER_IMG=<myregistry/image:<tag>> then the export will fail)
+# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
@@ -173,14 +173,14 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name vex8s-controller-builder
 	$(CONTAINER_TOOL) buildx use vex8s-controller-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${CONTROLLER_IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm vex8s-controller-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${CONTROLLER_IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
 ##@ Deployment
@@ -201,7 +201,10 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${CONTROLLER_IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image controller=localhost/controller:${IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image vexhub=localhost/vexhub:${IMG}
+	k3d image import localhost/controller:${IMG} --mode=direct --cluster="sbomscanner"
+	k3d image import localhost/vexhub:${IMG} --mode=direct --cluster="sbomscanner"
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 
 .PHONY: undeploy
