@@ -2,7 +2,7 @@
 
 ## Description
 
-`vex8s-controller` is an add-on for [SBOMscanner](github.com/alegrey91/sbomscanner) project. Its purpose is to automatically generate VEX documents based on the workloads running in a kubernetes cluster. It integrates directly with SBOMscanner by monitoring `VulnerabilityReports` created for container images and producing corresponding VEX documents that reflect each workload's `SecurityContext`.
+`vex8s-controller` is an add-on for [SBOMscanner](github.com/kubewarden/sbomscanner) project. Its purpose is to automatically generate VEX documents based on the workloads running in a kubernetes cluster. It integrates directly with SBOMscanner by monitoring `VulnerabilityReports` created for container images and producing corresponding VEX documents that reflect each workload's `SecurityContext`.
 
 ![vex8s-controller workflow](vex8s-controller.png)
 
