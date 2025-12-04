@@ -1,6 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
-#IMG ?= vexhub:latest
+#IMG ?= latest
 
 BUILD_VARS=GOTOOLCHAIN=go1.25.4
 
@@ -138,27 +137,21 @@ docker-build: docker-build-controller docker-build-vexhub
 
 .PHONY: docker-build-controller
 docker-build-controller: ## Build docker image with the manager.
+ifndef IMG
+	$(error IMG is undefined)
+endif
 	$(CONTAINER_TOOL) build \
 		-t localhost/controller:${IMG} \
 		-f ./Dockerfile.controller .
 
 .PHONY: docker-build-vexhub
 docker-build-vexhub: ## Build docker image with the manager.
+ifndef IMG
+	$(error IMG is undefined)
+endif
 	$(CONTAINER_TOOL) build \
 		-t localhost/vexhub:${IMG} \
 		-f ./Dockerfile.vexhub .
-
-.PHONY: docker-push
-docker-push: docker-push-controller docker-push-vexhub
-	$(CONTAINER_TOOL) push ${IMG}
-
-.PHONY: docker-push-controller
-docker-push-controller: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
-
-.PHONY: docker-push-vexhub
-docker-push-vexhub: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -200,16 +193,19 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	if [ -n "$$out" ]; then echo "$$out" | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -; else echo "No CRDs to delete; skipping."; fi
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=localhost/controller:${IMG}
-	cd config/manager && "$(KUSTOMIZE)" edit set image vexhub=localhost/vexhub:${IMG}
-	k3d image import localhost/controller:${IMG} --mode=direct --cluster="sbomscanner"
-	k3d image import localhost/vexhub:${IMG} --mode=direct --cluster="sbomscanner"
-	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
+deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+ifndef IMG
+	$(error IMG is undefined)
+endif
+	k3d image import localhost/controller:${IMG} --mode=direct --cluster=sbomscanner
+	k3d image import localhost/vexhub:${IMG} --mode=direct --cluster=sbomscanner
+	envsubst < examples/vex8s-controller.yaml | "$(KUBECTL)" apply -f -
+#	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
+#	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
+	"$(KUBECTL)" delete -f examples/vex8s-controller.yaml	
 
 ##@ Dependencies
 
