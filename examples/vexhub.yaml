@@ -3,5 +3,5 @@ kind: VEXHub
 metadata:
   name: vex8s-vexhub
 spec:
-  url: https://vex8s-controller-vexhub.vex8s-controller-system.svc.cluster.local:8080
+  url: https://vex8s-vexhub.vex8s-ns.svc.cluster.local:8080
   enabled: true
